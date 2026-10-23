@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# Proves the smoke test still catches a broken image (tests/guard.sh does the same for the nginx
+# floor): tests/negative.sh <candidate>
+# Builds small broken variants FROM the candidate and asserts that tests/smoke.sh rejects each one,
+# for the expected reason. Exits non-zero if any broken variant gets through.
+set -euo pipefail
+
+CANDIDATE="${1:?usage: tests/negative.sh <candidate>}"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+set -a
+. "$ROOT/versions.env"
+set +a
+
+ID="nr-neg-$$-${RANDOM}"
+VARIANTS=()
+trap 'docker image rm -f ${VARIANTS[@]+"${VARIANTS[@]}"} >/dev/null 2>&1 || true' EXIT
+FAILED=0
+
+variant() {   # variant <name> <RUN instruction>: builds FROM the candidate into $VARIANT
+    VARIANT="nginx-redirect-negative:${ID}-$1"
+    VARIANTS+=("$VARIANT")
+    printf 'FROM %s\nRUN %s\n' "$CANDIDATE" "$2" \
+        | docker build -q --platform "$PLATFORM" -t "$VARIANT" - >/dev/null
+}
+
+expect_rejected() {   # expect_rejected <what> <expected output part> <command...>
+    local what="$1" expected="$2" out
+    shift 2
+    if out="$("$@" 2>&1)"; then
+        echo "FAIL $what: the gate let the broken image through" >&2
+        FAILED=1
+    elif [[ "$out" == *"$expected"* ]]; then
+        echo "ok   $what"
+    else
+        printf '%s\n' "$out" | tail -5 >&2
+        echo "FAIL $what: rejected, but not for the expected reason ($expected)" >&2
+        FAILED=1
+    fi
+}
+
+variant no-post-rule "sed -i '/request_method = POST/,/^    }\$/d' /etc/nginx/conf.d/default.conf"
+expect_rejected "POST rule removed -> smoke.sh rejects it" \
+    "POST with SERVER_REDIRECT_POST_CODE=307: got [302" "$ROOT/tests/smoke.sh" "$VARIANT"
+
+variant no-forwarded-proto "sed -i 's/https https;/https http;/' /etc/nginx/conf.d/default.conf"
+expect_rejected "X-Forwarded-Proto ignored -> smoke.sh rejects it" \
+    "X-Forwarded-Proto: https: got [301 http://" "$ROOT/tests/smoke.sh" "$VARIANT"
+
+variant any-code "sed -i \"s/'30\\[12378\\]\\$'/'[0-9]*'/g\" /run.sh"
+expect_rejected "redirect code not validated -> smoke.sh rejects it" \
+    "invalid SERVER_REDIRECT_CODE=200 falls back to 301: got [200" "$ROOT/tests/smoke.sh" "$VARIANT"
+
+# A wrapper that still serves (exec of the real binary) but reports another version.
+variant wrong-version "mkdir -p /usr/local/sbin && printf '#!/bin/sh\n[ \"\$1\" = -v ] && { echo \"nginx version: nginx/0.0.1\" >&2; exit 0; }\nexec /usr/sbin/nginx \"\$@\"\n' > /usr/local/sbin/nginx && chmod +x /usr/local/sbin/nginx"
+expect_rejected "nginx binary not the expected version -> smoke.sh rejects it" \
+    "nginx -v is [nginx version: nginx/0.0.1]" "$ROOT/tests/smoke.sh" "$VARIANT"
+
+if [ "$FAILED" = 0 ]; then echo "negative tests passed: every broken variant was rejected"; else exit 1; fi

@@ -48,6 +48,48 @@ With `docker`
     docker run -e SERVER_REDIRECT=www.example.com -e SERVER_REDIRECT_PATH=/landingpage -p 8888:80 schmunk42/nginx-redirect
     docker run -e SERVER_REDIRECT=www.example.com -e SERVER_REDIRECT_PATH=/landingpage -e SERVER_REDIRECT_SCHEME=https -p 8888:80 schmunk42/nginx-redirect
 
+## Nightly build (GitLab CI)
+
+Rebuilt **every night** by GitLab CI (`.gitlab-ci.yml`, runner setup in
+[`docs/runner.md`](docs/runner.md)) on the official `nginx:1.30-alpine` (nginx.org's signed
+packages), pulled fresh and pinned by digest, plus `apk upgrade` for Alpine security fixes. Every
+nginx 1.30.x fix reaches the moving tags without editing this repo.
+
+| Tag | Use |
+|---|---|
+| `1.30-alpine`, `latest` | moving — what deployments pull |
+| `1.30.6-alpine` | latest build of that exact nginx |
+| `1.30.6-alpine-YYYYMMDD` | never overwritten — for rollbacks |
+
+Published to `registry.developpeur-freelance.io/silent/nginx-redirect-docker` and mirrored, same
+image, to Docker Hub `silentk/nginx-redirect`.
+
+```bash
+./build.sh                               # build + every gate, nothing pushed
+./build.sh --push                        # same + push the four tags to both registries (clean git tree)
+NGINX_BASE_TAG=1.30.6-alpine ./build.sh  # on a given official tag (rollback, reproduction)
+```
+
+`versions.env` holds the series (`NGINX_SERIES=1.30`), the security floor `MIN_NGINX_VERSION`, the
+platform and both registries. Gates, in order (any failure: nothing pushed):
+
+1. The official image ships a `1.30.x` nginx; the Dockerfile refuses a binary below
+   `MIN_NGINX_VERSION` or different from the announced version.
+2. With `--push`: never older than what `1.30-alpine` serves (its labels).
+3. If nginx.org has a newer 1.30.x than the official image: ntfy alert, built anyway (Alpine fixes).
+4. `tests/smoke.sh`: every environment variable above, over HTTP (codes per method, invalid codes,
+   path, scheme, `X-Forwarded-Proto`, `SERVER_NAME` capture, logs, missing `SERVER_REDIRECT`).
+5. `tests/negative.sh`: broken variants of the candidate are rejected by the smoke test.
+6. `tests/scan.sh`: Trivy, pinned by digest; refuses a fixable CRITICAL the published image does not
+   already have.
+7. Push from the tested image, moving tags last; each registry must then serve exactly that image.
+
+Offline tests: `tests/unit.sh` (scripts) and `tests/guard.sh` (the floor refuses `nginx:1.30.5-alpine`).
+
+On an nginx security release: nothing to do for the image (the next nightly, or "Run pipeline" on
+`master`, picks it up once the official image ships it); raise `MIN_NGINX_VERSION` so nothing older
+can be built. A new stable series (1.32) is never picked up automatically: change `NGINX_SERIES`.
+
 ---
 
 Built by [dmstr](http://diemeisterei.de)
