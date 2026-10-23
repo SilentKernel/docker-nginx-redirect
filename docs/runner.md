@@ -9,8 +9,7 @@ This file lists only what nginx-redirect-docker adds.
 
 - `nginx.org` (download page: the latest 1.30.x release, for the freshness check)
 - `dl-cdn.alpinelinux.org` (`apk upgrade` in the Dockerfile)
-- Docker Hub: `nginx:1.30-alpine`, `nginx:1.30.5-alpine` (guard test), `aquasec/trivy`, and the
-  push to `silentk/nginx-redirect` (mirror)
+- Docker Hub (pulls only): `nginx:1.30-alpine`, `nginx:1.30.5-alpine` (guard test), `aquasec/trivy`
 - Disk: negligible (~60 MB images).
 
 ## 2. GitLab settings (none are in the repo)
@@ -23,8 +22,7 @@ This file lists only what nginx-redirect-docker adds.
 3. **CI/CD > Variables** (protected, masked where secret):
    - `NTFY_TOPIC`: `gitlab-ci-alert-x564789`, the alerts topic of every project.
    - `NTFY_TOKEN`: ntfy access token, if the server requires one to publish.
-   - `DOCKERHUB_USER`: `silentk`; `DOCKERHUB_TOKEN`: a Docker Hub personal access token, Read &
-     Write (masked). Without them the Docker Hub mirror is skipped, the job stays green.
+   - (No Docker Hub variables: the image is published to our registry only.)
 4. **Build > Pipeline schedules > New schedule**: `30 6 * * *`, timezone Europe/Paris, branch
    `master` (after python/node-docker at 06:00; `concurrent = 1` on the VM runs them one after the
    other anyway).

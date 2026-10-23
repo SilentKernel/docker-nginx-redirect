@@ -4,7 +4,8 @@ A very simple container to redirect HTTP traffic to another server, based on `ng
 
 ## Resources
 
-- [Docker Hub](https://hub.docker.com/r/schmunk42/nginx-redirect/)
+- Image: `registry.developpeur-freelance.io/silent/nginx-redirect-docker` (our GitLab registry; `docker login registry.developpeur-freelance.io` with a
+  deploy token that has `read_registry`). It is no longer published on Docker Hub.
 
 ## Configuration
 
@@ -44,9 +45,9 @@ With `docker-compose`
     
 With `docker`    
 
-    docker run -e SERVER_REDIRECT=www.example.com -p 8888:80 schmunk42/nginx-redirect
-    docker run -e SERVER_REDIRECT=www.example.com -e SERVER_REDIRECT_PATH=/landingpage -p 8888:80 schmunk42/nginx-redirect
-    docker run -e SERVER_REDIRECT=www.example.com -e SERVER_REDIRECT_PATH=/landingpage -e SERVER_REDIRECT_SCHEME=https -p 8888:80 schmunk42/nginx-redirect
+    docker run -e SERVER_REDIRECT=www.example.com -p 8888:80 registry.developpeur-freelance.io/silent/nginx-redirect-docker
+    docker run -e SERVER_REDIRECT=www.example.com -e SERVER_REDIRECT_PATH=/landingpage -p 8888:80 registry.developpeur-freelance.io/silent/nginx-redirect-docker
+    docker run -e SERVER_REDIRECT=www.example.com -e SERVER_REDIRECT_PATH=/landingpage -e SERVER_REDIRECT_SCHEME=https -p 8888:80 registry.developpeur-freelance.io/silent/nginx-redirect-docker
 
 ## Nightly build (GitLab CI)
 
@@ -61,17 +62,17 @@ nginx 1.30.x fix reaches the moving tags without editing this repo.
 | `1.30.6-alpine` | latest build of that exact nginx |
 | `1.30.6-alpine-YYYYMMDD` | never overwritten — for rollbacks |
 
-Published to `registry.developpeur-freelance.io/silent/nginx-redirect-docker` and mirrored, same
-image, to Docker Hub `silentk/nginx-redirect`.
+Published to `registry.developpeur-freelance.io/silent/nginx-redirect-docker` only (the Docker Hub
+copy `silentk/nginx-redirect` is gone).
 
 ```bash
 ./build.sh                               # build + every gate, nothing pushed
-./build.sh --push                        # same + push the four tags to both registries (clean git tree)
+./build.sh --push                        # same + push the four tags (clean git tree)
 NGINX_BASE_TAG=1.30.6-alpine ./build.sh  # on a given official tag (rollback, reproduction)
 ```
 
 `versions.env` holds the series (`NGINX_SERIES=1.30`), the security floor `MIN_NGINX_VERSION`, the
-platform and both registries. Gates, in order (any failure: nothing pushed):
+platform and the registry. Gates, in order (any failure: nothing pushed):
 
 1. The official image ships a `1.30.x` nginx; the Dockerfile refuses a binary below
    `MIN_NGINX_VERSION` or different from the announced version.
@@ -82,7 +83,7 @@ platform and both registries. Gates, in order (any failure: nothing pushed):
 5. `tests/negative.sh`: broken variants of the candidate are rejected by the smoke test.
 6. `tests/scan.sh`: Trivy, pinned by digest; refuses a fixable CRITICAL the published image does not
    already have.
-7. Push from the tested image, moving tags last; each registry must then serve exactly that image.
+7. Push from the tested image, moving tags last; the registry must then serve exactly that image.
 
 Offline tests: `tests/unit.sh` (scripts) and `tests/guard.sh` (the floor refuses `nginx:1.30.5-alpine`).
 

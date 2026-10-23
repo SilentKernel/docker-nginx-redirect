@@ -1,5 +1,5 @@
 to:
-  image: schmunk42/nginx-redirect
+  image: registry.developpeur-freelance.io/silent/nginx-redirect-docker
   ports:
     - "8888:80"
   environment:

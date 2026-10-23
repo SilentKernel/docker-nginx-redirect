@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Builds the nginx-redirect image (IMAGE in versions.env) for production (amd64), tests it, and
-# pushes it only with --push, to our registry then to the Docker Hub mirror (DOCKERHUB_IMAGE).
+# pushes it to our registry only with --push (no Docker Hub copy).
 #
 #   ./build.sh            build + test
-#   ./build.sh --push     build + test + push the four tags to both registries
+#   ./build.sh --push     build + test + push the four tags
 #   NGINX_BASE_TAG=1.30.6-alpine ./build.sh   build on a given official tag (rollback, reproduction)
 #
 # The image starts FROM the official nginx:<series>-alpine (nginx.org's signed packages), pulled
@@ -18,7 +18,7 @@
 # Before anything is pushed, the candidate must pass tests/smoke.sh (the redirect behaviour over
 # HTTP) and tests/negative.sh (the gates still catch broken images); tests/scan.sh refuses a new
 # fixable CRITICAL CVE. The candidate lives under a private local name until the push: another build
-# on the same Docker engine pulling the public tags cannot swap it, and after the push each registry
+# on the same Docker engine pulling the public tags cannot swap it, and after the push the registry
 # must serve exactly the tested image.
 set -euo pipefail
 
@@ -175,24 +175,12 @@ push_tested() {
     echo "ok   ${tag} is the tested image (${CANDIDATE_ID})"
 }
 
-# The four tags of <repository>, moving ones last.
-push_all() {
-    local repo="$1"
-    push_tested "${repo}:${NGINX_VERSION}-alpine-${DATE}"
-    push_tested "${repo}:${NGINX_VERSION}-alpine"
-    push_tested "${repo}:${NGINX_SERIES}-alpine"
-    push_tested "${repo}:latest"
-}
-
 if [ "$PUSH" = 1 ]; then
     echo "==> pushing ${TAG_DATED}, ${TAG_VERSION}, ${TAG_MOVING} and ${TAG_LATEST} (moving tags last)"
-    push_all "$IMAGE"
-    if [ "${DOCKERHUB_MIRROR:-1}" = 0 ] || [ -z "${DOCKERHUB_IMAGE:-}" ]; then
-        echo "==> Docker Hub mirror skipped (DOCKERHUB_MIRROR=0 or no DOCKERHUB_IMAGE)"
-    else
-        echo "==> mirroring the same image to ${DOCKERHUB_IMAGE}"
-        push_all "$DOCKERHUB_IMAGE"
-    fi
+    push_tested "$TAG_DATED"
+    push_tested "$TAG_VERSION"
+    push_tested "$TAG_MOVING"
+    push_tested "$TAG_LATEST"
     if [ "$PUBLISHED_NGINX" != "$NGINX_VERSION" ]; then
         "$ROOT/scripts/notify.sh" default "package,arrow_up" \
             "nginx-redirect: nginx ${NGINX_VERSION}" \
