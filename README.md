@@ -64,8 +64,8 @@ editing this repo.
 | `1.30.6-trixie-YYYYMMDD` | never overwritten — for rollbacks |
 
 The image used to be built on `nginx:1.30-alpine`: the `1.30-alpine`, `1.30.x-alpine` and
-`1.30.x-alpine-YYYYMMDD` tags are no longer pushed and stay frozen in the registry (no more security
-updates). Move deployments pinned to `1.30-alpine` to `1.30-trixie` (or `latest`). The entrypoint
+`1.30.x-alpine-YYYYMMDD` tags are no longer pushed, and the registry cleanup removes them. Move
+deployments pinned to `1.30-alpine` to `1.30-trixie` (or `latest`). The entrypoint
 now runs under Debian's `/bin/sh` (dash) with GNU coreutils instead of busybox; the environment
 variables behave the same (`tests/smoke.sh`).
 

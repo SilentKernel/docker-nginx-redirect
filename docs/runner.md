@@ -29,8 +29,8 @@ This file lists only what nginx-redirect-docker adds.
    other anyway).
 5. **Settings > Packages and registries > Cleanup policies**: **disabled**, as for the other bases.
    The admin script `~/Dropbox/Scripts/clean-registry.sh` cleans the registry: its `KEEP_REGEX` must
-   protect the moving tags `1.30-trixie` and `latest` (`.*-trixie` may not be in the PHP bases'
-   list: check). The former `*-alpine` tags are frozen (no longer pushed); keep or delete them by hand.
+   protect the moving tags `1.30-trixie` and `latest` (both are: `.*-trixie`, `latest`). The former
+   `*-alpine` tags are no longer pushed nor protected: the cleanup removes them.
 6. **Settings > Repository > Protected branches**: `master` protected (only maintainers push),
    since a push to `master` publishes the image, and the protected variables are only given to
    protected branches.

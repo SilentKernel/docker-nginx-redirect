@@ -14,7 +14,7 @@
 #
 # Tags: <nginx>-trixie-YYYYMMDD (never overwritten, for rollbacks), <nginx>-trixie (latest build of
 # that version), <series>-trixie and latest (moving, what deployments use). The former -alpine tags
-# are no longer pushed: they stay frozen in the registry.
+# are no longer pushed, and the registry cleanup removes them.
 #
 # Before anything is pushed, the candidate must pass tests/smoke.sh (the redirect behaviour over
 # HTTP), tests/os-updates.sh (no Debian update pending) and tests/negative.sh (the gates still catch
