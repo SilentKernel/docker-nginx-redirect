@@ -4,20 +4,21 @@
 #
 #   ./build.sh            build + test
 #   ./build.sh --push     build + test + push the four tags
-#   NGINX_BASE_TAG=1.30.6-alpine ./build.sh   build on a given official tag (rollback, reproduction)
+#   NGINX_BASE_TAG=1.30.6-trixie ./build.sh   build on a given official tag (rollback, reproduction)
 #
-# The image starts FROM the official nginx:<series>-alpine (nginx.org's signed packages), pulled
-# fresh and pinned by digest, then `apk upgrade` for Alpine fixes. The Dockerfile refuses an nginx
-# below MIN_NGINX_VERSION; --push refuses to publish an nginx older than the moving tag serves. An
-# official image lagging behind nginx.org's latest <series>.x is reported (ntfy), not blocked: the
-# Alpine fixes still ship, the next night picks up the new nginx.
+# The image starts FROM the official nginx:<series>-trixie (Debian, nginx.org's signed packages),
+# pulled fresh and pinned by digest, then `apt-get upgrade` for Debian fixes. The Dockerfile refuses
+# an nginx below MIN_NGINX_VERSION; --push refuses to publish an nginx older than the moving tag
+# serves. An official image lagging behind nginx.org's latest <series>.x is reported (ntfy), not
+# blocked: the Debian fixes still ship, the next night picks up the new nginx.
 #
-# Tags: <nginx>-alpine-YYYYMMDD (never overwritten, for rollbacks), <nginx>-alpine (latest build of
-# that version), <series>-alpine and latest (moving, what deployments use).
+# Tags: <nginx>-trixie-YYYYMMDD (never overwritten, for rollbacks), <nginx>-trixie (latest build of
+# that version), <series>-trixie and latest (moving, what deployments use). The former -alpine tags
+# are no longer pushed: they stay frozen in the registry.
 #
 # Before anything is pushed, the candidate must pass tests/smoke.sh (the redirect behaviour over
-# HTTP) and tests/negative.sh (the gates still catch broken images); tests/scan.sh refuses a new
-# fixable CRITICAL CVE. The candidate lives under a private local name until the push: another build
+# HTTP), tests/os-updates.sh (no Debian update pending) and tests/negative.sh (the gates still catch
+# broken images); tests/scan.sh refuses a new fixable CRITICAL CVE. The candidate lives under a private local name until the push: another build
 # on the same Docker engine pulling the public tags cannot swap it, and after the push the registry
 # must serve exactly the tested image.
 set -euo pipefail
@@ -50,7 +51,7 @@ eval "$resolved"
 echo "    nginx.org: ${NGINX_LATEST}"
 
 # The official image: its digest (what we build FROM) and the nginx version it ships.
-BASE_TAG="nginx:${NGINX_BASE_TAG:-${NGINX_SERIES}-alpine}"
+BASE_TAG="nginx:${NGINX_BASE_TAG:-${NGINX_SERIES}-trixie}"
 echo "==> reading ${BASE_TAG}"
 read -r BASE_DIGEST NGINX_VERSION < <(docker buildx imagetools inspect "$BASE_TAG" --format '{{json .}}' | python3 -I -c '
 import json, sys
@@ -67,10 +68,10 @@ BASE_IMAGE="nginx@${BASE_DIGEST}"
 echo "    ${BASE_TAG} = ${BASE_IMAGE}: nginx ${NGINX_VERSION}"
 export NGINX_VERSION
 
-TAG_VERSION="${IMAGE}:${NGINX_VERSION}-alpine"
+TAG_VERSION="${IMAGE}:${NGINX_VERSION}-trixie"
 DATE="$(date -u +%Y%m%d)"
 TAG_DATED="${TAG_VERSION}-${DATE}"
-TAG_MOVING="${IMAGE}:${NGINX_SERIES}-alpine"
+TAG_MOVING="${IMAGE}:${NGINX_SERIES}-trixie"
 TAG_LATEST="${IMAGE}:latest"
 BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 CANDIDATE="nginx-redirect-candidate:$(date -u +%Y%m%d%H%M%S)-$$"
@@ -117,11 +118,11 @@ if ! "$ROOT/scripts/version-compare.sh" "$NGINX_LATEST" "$NGINX_VERSION"; then
     echo "==> WARNING: ${BASE_TAG} ships nginx ${NGINX_VERSION}, nginx.org has ${NGINX_LATEST}"
     "$ROOT/scripts/notify.sh" high "warning,hourglass" \
         "nginx-redirect-docker: official image lags (nginx ${NGINX_VERSION} < ${NGINX_LATEST})" \
-        "${BASE_TAG} still ships nginx ${NGINX_VERSION}; nginx.org released ${NGINX_LATEST}. Built anyway (Alpine fixes). If ${NGINX_LATEST} is a security release, raise MIN_NGINX_VERSION to stop publishing older builds."
+        "${BASE_TAG} still ships nginx ${NGINX_VERSION}; nginx.org released ${NGINX_LATEST}. Built anyway (Debian fixes). If ${NGINX_LATEST} is a security release, raise MIN_NGINX_VERSION to stop publishing older builds."
 fi
 
 echo "==> building on ${BASE_IMAGE} (nginx ${NGINX_VERSION}, floor ${MIN_NGINX_VERSION}), ${PLATFORM}"
-# --pull refreshes the base; --no-cache so `apk upgrade` really fetches tonight's Alpine fixes;
+# --pull refreshes the base; --no-cache so `apt-get upgrade` really fetches tonight's Debian fixes;
 # --load puts the result in the local engine for the tests.
 docker buildx build --pull --no-cache --load \
     --platform "$PLATFORM" \
@@ -129,8 +130,8 @@ docker buildx build --pull --no-cache --load \
     --build-arg NGINX_VERSION="$NGINX_VERSION" \
     --build-arg MIN_NGINX_VERSION="$MIN_NGINX_VERSION" \
     --label org.opencontainers.image.title=nginx-redirect \
-    --label "org.opencontainers.image.description=HTTP redirect container on nginx ${NGINX_VERSION} (official alpine image + apk upgrade)" \
-    --label "org.opencontainers.image.version=${NGINX_VERSION}-alpine" \
+    --label "org.opencontainers.image.description=HTTP redirect container on nginx ${NGINX_VERSION} (official trixie image + apt-get upgrade)" \
+    --label "org.opencontainers.image.version=${NGINX_VERSION}-trixie" \
     --label "org.opencontainers.image.revision=${SOURCE_COMMIT}" \
     --label "org.opencontainers.image.created=${BUILD_DATE}" \
     --label "org.opencontainers.image.base.name=docker.io/library/${BASE_TAG}" \
@@ -143,6 +144,8 @@ echo "==> candidate ${CANDIDATE} (${CANDIDATE_ID})"
 
 echo "==> smoke test (redirect behaviour over HTTP)"
 "$ROOT/tests/smoke.sh" "$CANDIDATE"
+echo "==> Debian updates (none may be pending)"
+"$ROOT/tests/os-updates.sh" "$CANDIDATE"
 echo "==> negative tests (the gates catch broken images)"
 "$ROOT/tests/negative.sh" "$CANDIDATE"
 echo "==> vulnerability gate (no new fixable CRITICAL against the published image)"

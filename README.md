@@ -52,15 +52,22 @@ With `docker`
 ## Nightly build (GitLab CI)
 
 Rebuilt **every night** by GitLab CI (`.gitlab-ci.yml`, runner setup in
-[`docs/runner.md`](docs/runner.md)) on the official `nginx:1.30-alpine` (nginx.org's signed
-packages), pulled fresh and pinned by digest, plus `apk upgrade` for Alpine security fixes. Every
-nginx 1.30.x fix reaches the moving tags without editing this repo.
+[`docs/runner.md`](docs/runner.md)) on the official Debian variant `nginx:1.30-trixie` (nginx.org's
+signed packages, same base as `../nginx-s3-gateway-docker`), pulled fresh and pinned by digest, plus
+`apt-get upgrade` for Debian security fixes. Every nginx 1.30.x fix reaches the moving tags without
+editing this repo.
 
 | Tag | Use |
 |---|---|
-| `1.30-alpine`, `latest` | moving — what deployments pull |
-| `1.30.6-alpine` | latest build of that exact nginx |
-| `1.30.6-alpine-YYYYMMDD` | never overwritten — for rollbacks |
+| `1.30-trixie`, `latest` | moving — what deployments pull |
+| `1.30.6-trixie` | latest build of that exact nginx |
+| `1.30.6-trixie-YYYYMMDD` | never overwritten — for rollbacks |
+
+The image used to be built on `nginx:1.30-alpine`: the `1.30-alpine`, `1.30.x-alpine` and
+`1.30.x-alpine-YYYYMMDD` tags are no longer pushed and stay frozen in the registry (no more security
+updates). Move deployments pinned to `1.30-alpine` to `1.30-trixie` (or `latest`). The entrypoint
+now runs under Debian's `/bin/sh` (dash) with GNU coreutils instead of busybox; the environment
+variables behave the same (`tests/smoke.sh`).
 
 Published to `registry.developpeur-freelance.io/silent/nginx-redirect-docker` only (the Docker Hub
 copy `silentk/nginx-redirect` is gone).
@@ -68,7 +75,7 @@ copy `silentk/nginx-redirect` is gone).
 ```bash
 ./build.sh                               # build + every gate, nothing pushed
 ./build.sh --push                        # same + push the four tags (clean git tree)
-NGINX_BASE_TAG=1.30.6-alpine ./build.sh  # on a given official tag (rollback, reproduction)
+NGINX_BASE_TAG=1.30.6-trixie ./build.sh  # on a given official tag (rollback, reproduction)
 ```
 
 `versions.env` holds the series (`NGINX_SERIES=1.30`), the security floor `MIN_NGINX_VERSION`, the
@@ -76,16 +83,22 @@ platform and the registry. Gates, in order (any failure: nothing pushed):
 
 1. The official image ships a `1.30.x` nginx; the Dockerfile refuses a binary below
    `MIN_NGINX_VERSION` or different from the announced version.
-2. With `--push`: never older than what `1.30-alpine` serves (its labels).
-3. If nginx.org has a newer 1.30.x than the official image: ntfy alert, built anyway (Alpine fixes).
+2. With `--push`: never older than what `1.30-trixie` serves (its labels).
+3. If nginx.org has a newer 1.30.x than the official image: ntfy alert, built anyway (Debian fixes).
 4. `tests/smoke.sh`: every environment variable above, over HTTP (codes per method, invalid codes,
    path, scheme, `X-Forwarded-Proto`, `SERVER_NAME` capture, logs, missing `SERVER_REDIRECT`).
-5. `tests/negative.sh`: broken variants of the candidate are rejected by the smoke test.
-6. `tests/scan.sh`: Trivy, pinned by digest; refuses a fixable CRITICAL the published image does not
+5. `tests/os-updates.sh` (shared with the other Debian bases, e.g. `../python-docker`): `apt-get
+   update` in the candidate, and no update from Debian's archive (trixie, trixie-updates,
+   trixie-security) may be pending; what only `dist-upgrade` would do is a warning.
+6. `tests/negative.sh`: broken variants of the candidate are rejected by the smoke test, and an old
+   trixie snapshot (`debian:trixie-20250811`, pinned by digest) by `tests/os-updates.sh`, which
+   accepts the candidate.
+7. `tests/scan.sh`: Trivy, pinned by digest; refuses a fixable CRITICAL the published image does not
    already have.
-7. Push from the tested image, moving tags last; the registry must then serve exactly that image.
+8. Push from the tested image, moving tags last; the registry must then serve exactly that image.
 
-Offline tests: `tests/unit.sh` (scripts) and `tests/guard.sh` (the floor refuses `nginx:1.30.5-alpine`).
+Offline tests: `tests/unit.sh` (scripts, and `tests/os-updates.sh` on captured apt outputs in
+`tests/fixtures/apt/`) and `tests/guard.sh` (the floor refuses `nginx:1.30.5-trixie`).
 
 On an nginx security release: nothing to do for the image (the next nightly, or "Run pipeline" on
 `master`, picks it up once the official image ships it); raise `MIN_NGINX_VERSION` so nothing older

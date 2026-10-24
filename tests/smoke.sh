@@ -61,7 +61,10 @@ done
 expect "X-Forwarded-Proto: https" "301 https://www.example.com/p" -H "X-Forwarded-Proto: https" "http://localhost/p"
 expect "X-Forwarded-Proto: http" "301 http://www.example.com/p" -H "X-Forwarded-Proto: http" "http://localhost/p"
 sleep 0.5
-docker logs "$CID" 2>/dev/null | grep -q '"GET /foo/bar?x=1&y=2 HTTP/1.1" 301' \
+# Read into a variable, never piped into grep -q: grep exits on the first match, docker logs then dies
+# of SIGPIPE and pipefail turns the match into a failure (and, under `!`, a hit into a pass).
+logs="$(docker logs "$CID" 2>/dev/null)"
+grep -q '"GET /foo/bar?x=1&y=2 HTTP/1.1" 301' <<<"$logs" \
     || fail "the access log of the GET request is not on stdout"
 pass "access log on stdout"
 
@@ -103,7 +106,8 @@ expect "SERVER_NAME capture in SERVER_REDIRECT" "301 http://shop.example.org/car
 start -e SERVER_REDIRECT=www.example.com -e SERVER_ACCESS_LOG=/dev/null
 expect "request with SERVER_ACCESS_LOG=/dev/null" "301 http://www.example.com/quiet" "http://localhost/quiet"
 sleep 0.5
-! docker logs "$CID" 2>/dev/null | grep -q 'GET /quiet' || fail "SERVER_ACCESS_LOG=/dev/null still logs to stdout"
+logs="$(docker logs "$CID" 2>/dev/null)"
+! grep -q 'GET /quiet' <<<"$logs" || fail "SERVER_ACCESS_LOG=/dev/null still logs to stdout"
 pass "SERVER_ACCESS_LOG=/dev/null silences the access log"
 
 # 7. SERVER_REDIRECT is mandatory.

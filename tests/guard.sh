@@ -13,7 +13,7 @@ set +a
 
 # The official 1.30.5, one patch release below the floor (MIN_NGINX_VERSION=1.30.6), as the
 # negative input. Raising the floor keeps this test valid.
-OLD="nginx:1.30.5-alpine"
+OLD="nginx:1.30.5-trixie"
 
 log="$(mktemp)"
 trap 'rm -f "$log"' EXIT

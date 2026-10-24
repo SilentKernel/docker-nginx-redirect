@@ -1,14 +1,23 @@
 # syntax=docker/dockerfile:1
-# nginx-redirect: the official nginx alpine image + run.sh/default.conf. Built by build.sh, which
-# pins BASE_IMAGE to the digest of nginx:<series>-alpine it just pulled and reads its NGINX_VERSION.
-ARG BASE_IMAGE=nginx:1.30-alpine
+# nginx-redirect: the official nginx Debian (trixie) image + run.sh/default.conf. Built by build.sh,
+# which pins BASE_IMAGE to the digest of nginx:<series>-trixie it just pulled and reads its
+# NGINX_VERSION.
+ARG BASE_IMAGE=nginx:1.30-trixie
 FROM ${BASE_IMAGE}
 
 ARG NGINX_VERSION
 ARG MIN_NGINX_VERSION
 
-# Alpine security fixes without waiting for the official image to be rebuilt.
-RUN apk upgrade --no-cache
+# Debian security fixes without waiting for the official image to be rebuilt; never cached (build.sh
+# builds with --no-cache), tests/os-updates.sh then checks none is left. The official image installs
+# nginx from nginx.org and removes nginx.org's apt source afterwards: only Debian's sources
+# (/etc/apt/sources.list.d/debian.sources) remain, so this cannot move nginx (Debian's own nginx is
+# older, and apt does not downgrade). Should nginx.org's source come back, the version check below
+# refuses an nginx other than the one build.sh expects.
+RUN set -eu; \
+    apt-get update -o APT::Update::Error-Mode=any; \
+    DEBIAN_FRONTEND=noninteractive apt-get upgrade -y -o Dpkg::Options::=--force-confold; \
+    rm -rf /var/lib/apt/lists/*
 
 # Refuse to produce a vulnerable image: the nginx binary must be the version build.sh expects and
 # not below the floor (versions.env).

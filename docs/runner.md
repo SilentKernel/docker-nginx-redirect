@@ -8,9 +8,10 @@ This file lists only what nginx-redirect-docker adds.
 ## 1. Outbound access (in addition to the PHP bases' list)
 
 - `nginx.org` (download page: the latest 1.30.x release, for the freshness check)
-- `dl-cdn.alpinelinux.org` (`apk upgrade` in the Dockerfile)
-- Docker Hub (pulls only): `nginx:1.30-alpine`, `nginx:1.30.5-alpine` (guard test), `aquasec/trivy`
-- Disk: negligible (~60 MB images).
+- `deb.debian.org` (`apt-get upgrade` in the Dockerfile, `tests/os-updates.sh`)
+- Docker Hub (pulls only): `nginx:1.30-trixie`, `nginx:1.30.5-trixie` (guard test),
+  `debian:trixie-20250811` (negative test of `tests/os-updates.sh`), `aquasec/trivy`
+- Disk: small (~200 MB images).
 
 ## 2. GitLab settings (none are in the repo)
 
@@ -28,7 +29,8 @@ This file lists only what nginx-redirect-docker adds.
    other anyway).
 5. **Settings > Packages and registries > Cleanup policies**: **disabled**, as for the other bases.
    The admin script `~/Dropbox/Scripts/clean-registry.sh` cleans the registry: its `KEEP_REGEX` must
-   protect the moving tags `1.30-alpine` and `latest` (`.*-alpine` is not in the PHP bases' list).
+   protect the moving tags `1.30-trixie` and `latest` (`.*-trixie` may not be in the PHP bases'
+   list: check). The former `*-alpine` tags are frozen (no longer pushed); keep or delete them by hand.
 6. **Settings > Repository > Protected branches**: `master` protected (only maintainers push),
    since a push to `master` publishes the image, and the protected variables are only given to
    protected branches.
