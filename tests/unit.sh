@@ -83,6 +83,14 @@ expect_ok "index: asks for our platform's manifest" "need-child sha256:amd" \
     ids sha256:top '{"manifests": [{"digest": "sha256:arm", "platform": {"os": "linux", "architecture": "arm64"}}, {"digest": "sha256:amd", "platform": {"os": "linux", "architecture": "amd64"}}]}' linux/amd64
 expect_ok "index + child: top, platform manifest, config" "$(printf 'sha256:top\nsha256:amd\nsha256:cfg')" \
     ids sha256:top '{"manifests": [{"digest": "sha256:amd", "platform": {"os": "linux", "architecture": "amd64"}}]}' linux/amd64 '{"config": {"digest": "sha256:cfg"}}'
+expect_ok "--digest: the human-readable block of an old buildx gives the top digest" "sha256:f2b3670d7396b5df0e0e613842405e847850baa247c7468e229f57dd392d8462" \
+    sh -c 'printf "Name:      r\nMediaType: m\nDigest:    sha256:f2b3670d7396b5df0e0e613842405e847850baa247c7468e229f57dd392d8462\n" | python3 -I "$1" --digest' _ "$ROOT/scripts/served-ids.py"
+expect_ok "--digest: the JSON of .Manifest" "sha256:f2b3670d7396b5df0e0e613842405e847850baa247c7468e229f57dd392d8462" \
+    sh -c 'printf "{\"mediaType\": \"m\", \"digest\": \"sha256:f2b3670d7396b5df0e0e613842405e847850baa247c7468e229f57dd392d8462\"}" | python3 -I "$1" --digest' _ "$ROOT/scripts/served-ids.py"
+expect_fail "--digest: an answer without a digest is refused" "no top-level digest" \
+    sh -c 'printf "Name:      r\n" | python3 -I "$1" --digest 2>&1' _ "$ROOT/scripts/served-ids.py"
+expect_fail "a top that is not a digest is refused" "the top digest is not a digest" \
+    sh -c 'python3 -I "$1" "Name:      r" "{\"config\": {\"digest\": \"sha256:cfg\"}}" linux/amd64 2>&1' _ "$ROOT/scripts/served-ids.py"
 
 echo "--- notify.sh"
 expect_ok "no NTFY_TOPIC: skipped, exit 0" "notify: NTFY_TOPIC not set, skipped: t" \
