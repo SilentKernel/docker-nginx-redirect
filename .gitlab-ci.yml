@@ -15,7 +15,7 @@ workflow:
       when: never
     - if: $CI_COMMIT_BRANCH
 
-stages: [test, build, notify]
+stages: [test, build, downstream, notify]
 
 default:
   tags: [nginx-redirect-amd64]
@@ -74,6 +74,21 @@ build:
       - trivy-report.json
       - trivy-report.txt
       - trivy-published.json
+
+# After a publish, rebuild everything built on this image: deploy-automation fans out to the
+# dependent projects (dependents.json there) and, with strategy: depend, their result shows here.
+trigger:dependents:
+  stage: downstream
+  rules:
+    - <<: *publish
+      when: on_success
+  variables:
+    BASE: nginx-redirect-docker
+    BASE_REF: $CI_COMMIT_SHA
+  trigger:
+    project: silent/deploy-automation
+    branch: main
+    strategy: depend
 
 notify:failure:
   stage: notify
