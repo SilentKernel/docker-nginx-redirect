@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Smoke test of a built nginx-redirect image: tests/smoke.sh <image>
 # Every documented environment variable (README.md), each case in its own container, checked over
-# HTTP from inside the container (status code + Location). Exits non-zero on the first failure.
+# HTTP from inside the container (status code + Location), then the HEALTHCHECK (configuration,
+# healthy, /tmp/drain, unhealthy without nginx). Exits non-zero on the first failure.
 set -euo pipefail
 
 TARGET="${1:?usage: tests/smoke.sh <image>}"
@@ -116,5 +117,46 @@ if out="$(docker run --rm --platform "$PLATFORM" "$TARGET" 2>&1)"; then
 fi
 [[ "$out" == *"SERVER_REDIRECT is not set"* ]] || fail "no SERVER_REDIRECT: unexpected output [$out]"
 pass "refuses to start without SERVER_REDIRECT"
+
+# 8. Healthcheck (what docker rollout waits for): the exact configuration, healthy while nginx
+#    answers, unhealthy while /tmp/drain exists, unhealthy when nginx does not run.
+HC_EXPECTED='[CMD-SHELL test ! -f /tmp/drain && curl -fsS -o /dev/null --max-time 2 http://127.0.0.1/ || exit 1] 10s 3s 30s 1s 3'
+hc="$(docker image inspect -f '{{with .Config.Healthcheck}}{{.Test}} {{.Interval}} {{.Timeout}} {{.StartPeriod}} {{.StartInterval}} {{.Retries}}{{else}}none{{end}}' "$TARGET")"
+case "$hc" in none|"[NONE] "*) fail "no HEALTHCHECK in the image" ;; esac   # [NONE]: HEALTHCHECK NONE
+[ "$hc" = "$HC_EXPECTED" ] || fail "HEALTHCHECK is [$hc], expected [$HC_EXPECTED]"
+pass "HEALTHCHECK: /tmp/drain + curl http://127.0.0.1/, every 10s (1s while starting), 3 retries"
+
+# wait_health <container> <status> <seconds>: until Docker reports that health status.
+wait_health() {
+    local cid="$1" want="$2" got=""
+    for _ in $(seq 1 $(($3 * 2))); do
+        got="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$cid")"
+        [ "$got" = "$want" ] && return 0
+        sleep 0.5
+    done
+    echo "health is [${got}] after $3 s, expected [${want}]; checks: $(docker inspect -f '{{with .State.Health}}{{json .Log}}{{end}}' "$cid" | tail -c 600)" >&2
+    return 1
+}
+
+start -e SERVER_REDIRECT=www.example.com
+wait_health "$CID" healthy 15 || fail "never healthy with the image's own HEALTHCHECK"
+pass "healthy with the image's own HEALTHCHECK"
+
+# The same command, checked every second and unhealthy at the first failure: the tests below take
+# seconds instead of the 30 s the production timings need.
+FAST=(--health-interval=1s --health-retries=1 --health-start-period=1ms)
+start "${FAST[@]}" -e SERVER_REDIRECT=www.example.com
+wait_health "$CID" healthy 10 || fail "never healthy (fast timings)"
+docker exec "$CID" touch /tmp/drain
+wait_health "$CID" unhealthy 10 || fail "still healthy with /tmp/drain: docker rollout could not drain it"
+expect "still redirects while draining" "301 http://www.example.com/d" "http://localhost/d"
+docker exec "$CID" rm /tmp/drain
+wait_health "$CID" healthy 10 || fail "not healthy again once /tmp/drain is removed"
+pass "/tmp/drain: unhealthy while it exists (nginx still serving), healthy again without it"
+
+CID="$(docker run -d --platform "$PLATFORM" "${FAST[@]}" --entrypoint sleep "$TARGET" infinity)"
+CONTAINERS+=("$CID")
+wait_health "$CID" unhealthy 10 || fail "healthy although nginx is not running: the HEALTHCHECK does not test nginx"
+pass "unhealthy when nginx does not run"
 
 echo "all checks passed for $TARGET"

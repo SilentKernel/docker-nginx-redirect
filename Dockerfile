@@ -37,4 +37,12 @@ COPY default.conf /etc/nginx/conf.d/default.conf
 
 RUN chmod +x /run.sh
 
+# Healthy while nginx answers (any redirect counts: curl -f fails only on 4xx/5xx), so docker rollout
+# can wait for the new container instead of sleeping. /tmp/drain makes it unhealthy on purpose: the
+# drain step of docker rollout (--pre-stop-hook "touch /tmp/drain && sleep N"). A new container is
+# checked every second for its first 30 s, then every 10 s; 3 failures in a row = unhealthy.
+# tests/smoke.sh checks this exact configuration and its behaviour.
+HEALTHCHECK --interval=10s --timeout=3s --start-period=30s --start-interval=1s --retries=3 \
+    CMD test ! -f /tmp/drain && curl -fsS -o /dev/null --max-time 2 http://127.0.0.1/ || exit 1
+
 CMD ["/run.sh"]

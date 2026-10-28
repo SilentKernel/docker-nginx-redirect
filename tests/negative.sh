@@ -55,6 +55,30 @@ variant wrong-version "mkdir -p /usr/local/sbin && printf '#!/bin/sh\n[ \"\$1\" 
 expect_rejected "nginx binary not the expected version -> smoke.sh rejects it" \
     "nginx -v is [nginx version: nginx/0.0.1]" "$ROOT/tests/smoke.sh" "$VARIANT"
 
+# Healthcheck: removed, retimed, or answering without looking at nginx. The curl wrappers lie only
+# to the healthcheck (the one call with --max-time); smoke.sh's own requests get the real curl.
+variant_lines() {   # variant_lines <name> <Dockerfile lines after FROM the candidate>: builds into $VARIANT
+    VARIANT="nginx-redirect-negative:${ID}-$1"
+    VARIANTS+=("$VARIANT")
+    printf 'FROM %s\n%s\n' "$CANDIDATE" "$2" \
+        | docker build -q --platform "$PLATFORM" -t "$VARIANT" - >/dev/null
+}
+variant_lines no-healthcheck "HEALTHCHECK NONE"
+expect_rejected "HEALTHCHECK removed -> smoke.sh rejects it" \
+    "no HEALTHCHECK in the image" "$ROOT/tests/smoke.sh" "$VARIANT"
+
+variant_lines slow-healthcheck "HEALTHCHECK --interval=5m CMD curl -fsS -o /dev/null http://127.0.0.1/ || exit 1"
+expect_rejected "HEALTHCHECK changed -> smoke.sh rejects it" \
+    "HEALTHCHECK is [[CMD-SHELL curl" "$ROOT/tests/smoke.sh" "$VARIANT"
+
+variant always-healthy "printf '#!/bin/sh\ncase \" \$* \" in *\" --max-time \"*) exit 0;; esac\nexec /usr/bin/curl \"\$@\"\n' > /usr/local/bin/curl && chmod +x /usr/local/bin/curl"
+expect_rejected "healthcheck passing without nginx -> smoke.sh rejects it" \
+    "healthy although nginx is not running" "$ROOT/tests/smoke.sh" "$VARIANT"
+
+variant never-healthy "printf '#!/bin/sh\ncase \" \$* \" in *\" --max-time \"*) exit 7;; esac\nexec /usr/bin/curl \"\$@\"\n' > /usr/local/bin/curl && chmod +x /usr/local/bin/curl"
+expect_rejected "healthcheck that never passes -> smoke.sh rejects it" \
+    "never healthy with the image's own HEALTHCHECK" "$ROOT/tests/smoke.sh" "$VARIANT"
+
 # Debian updates not applied: an old trixie snapshot (pinned by digest, so it always has pending
 # updates) must be refused by tests/os-updates.sh, and the candidate accepted.
 OLD_TRIXIE=debian:trixie-20250811@sha256:6d87375016340817ac2391e670971725a9981cfc24e221c47734681ed0f6c0f5

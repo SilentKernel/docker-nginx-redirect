@@ -49,6 +49,15 @@ With `docker`
     docker run -e SERVER_REDIRECT=www.example.com -e SERVER_REDIRECT_PATH=/landingpage -p 8888:80 registry.developpeur-freelance.io/silent/nginx-redirect-docker
     docker run -e SERVER_REDIRECT=www.example.com -e SERVER_REDIRECT_PATH=/landingpage -e SERVER_REDIRECT_SCHEME=https -p 8888:80 registry.developpeur-freelance.io/silent/nginx-redirect-docker
 
+## Healthcheck
+
+The image has a `HEALTHCHECK`: healthy while nginx answers on `http://127.0.0.1/` (the redirect
+itself counts), checked every second for the first 30 s, then every 10 s; unhealthy after 3 failures
+in a row. While `/tmp/drain` exists it reports unhealthy on purpose, so that
+`docker rollout --pre-stop-hook "touch /tmp/drain && sleep 35"` can take the old container out of
+the proxy before stopping it. `docker ps` shows `(healthy)`. `tests/smoke.sh` checks the exact
+configuration and its behaviour; `tests/negative.sh` proves a missing or broken healthcheck is refused.
+
 ## Nightly build (GitLab CI)
 
 Rebuilt **every night** by GitLab CI (`.gitlab-ci.yml`, runner setup in
