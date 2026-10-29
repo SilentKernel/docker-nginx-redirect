@@ -6,6 +6,7 @@
 # tests, CVE gate) runs inside build.sh before anything is pushed.
 #
 # CI/CD variables (Settings > CI/CD > Variables): NTFY_TOPIC (notifications; unset = none),
+# NTFY_TOPIC_NEWBASE (instance level, masked: the "new version" message only; unset = not sent),
 # NTFY_TOKEN (masked, optional).
 
 workflow:

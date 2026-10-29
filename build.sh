@@ -187,7 +187,8 @@ if [ "$PUSH" = 1 ]; then
     push_tested "$TAG_MOVING"
     push_tested "$TAG_LATEST"
     if [ "$PUBLISHED_NGINX" != "$NGINX_VERSION" ]; then
-        "$ROOT/scripts/notify.sh" default "package,arrow_up" \
+        # A new version to roll out: the important channel (NTFY_TOPIC_NEWBASE), not NTFY_TOPIC.
+        NTFY_TOPIC="${NTFY_TOPIC_NEWBASE:-}" "$ROOT/scripts/notify.sh" default "package,arrow_up" \
             "nginx-redirect: nginx ${NGINX_VERSION}" \
             "${TAG_MOVING} moved from nginx ${PUBLISHED_NGINX:-none} to ${NGINX_VERSION}. Redeploy the redirect containers to pick it up."
     fi
