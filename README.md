@@ -1,5 +1,11 @@
 # docker-nginx-redirect
 
+> [!WARNING]
+> **Abandoned (2026-11-05).** We no longer run it: our `www` and legacy-domain redirects are now Cloudflare
+> Single Redirects. This repository is archived: no more nightly rebuilds, no security updates, and the images
+> already published will not be refreshed. A redirect rule at your CDN, or a few lines of plain `nginx`
+> configuration, does the same job.
+
 A very simple container to redirect HTTP traffic to another server, based on `nginx`
 
 ## Resources
